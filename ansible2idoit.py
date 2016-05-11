@@ -7,10 +7,13 @@ import jsonrpclib
 import os
 import sys
 import yaml
-FACTS = "/tmp/dom"
 
+# Modify  following variables for your needs
+FACTS = "/home/test/facts"
 apikey = "your_api_key"
-server = jsonrpclib.Server("http://idoit.cc-0.dom.de/src/jsonrpc.php")
+URL = "http://demo.idoit.de/src/jsonrpc.php"
+
+server = jsonrpclib.Server(URL)
 ANSIBLE_HOST = sys.argv[1]
 if len(sys.argv) < 3:
     HOST = ANSIBLE_HOST
@@ -41,7 +44,7 @@ def idfromip(search_ip, objID=HOST_ID):
             return int(entry["id"])
 
 with open(FACTS + "/" + ANSIBLE_HOST, "r") as f:
-        facts = yaml.load(f)
+    facts = yaml.load(f)
 for i in range(10):
     if "ansible_eth" + str(i) in facts["ansible_facts"]:
         IFACE = facts["ansible_facts"]["ansible_eth" + str(i)]["device"]
@@ -58,7 +61,7 @@ for i in range(10):
                 print "Created Interface %s" % IFACE
             else:
                 IFACE_DATA["id"] = IFACE_ID
-                server.cmdb.category.update(apikey=apikey, objID=HOST_ID, category="C__CMDB__SUBCAT__NETWORK_INTERFACE_P", data=IFACE_DATA).get('message')
+                server.cmdb.category.update(apikey=apikey, objID=HOST_ID, category="C__CMDB__SUBCAT__NETWORK_INTERFACE_P", data=IFACE_DATA)
                 print "Updated Interface %s" % IFACE
 
         PORT_ID = idfromtitle(IFACE, category="C__CMDB__SUBCAT__NETWORK_PORT")
@@ -84,7 +87,7 @@ for i in range(10):
             print "Created Port %s" % IFACE
         else:
             PORT_DATA["id"] = PORT_ID
-            server.cmdb.category.update(apikey=apikey, objID=HOST_ID, category="C__CMDB__SUBCAT__NETWORK_PORT", data=PORT_DATA).get('message')
+            server.cmdb.category.update(apikey=apikey, objID=HOST_ID, category="C__CMDB__SUBCAT__NETWORK_PORT", data=PORT_DATA)
             print "Updated Port %s" % IFACE
 
         if "ipv4" in facts["ansible_facts"]["ansible_eth" + str(i)]:
@@ -111,8 +114,37 @@ for i in range(10):
                 print "Created IP %s" % IP
             else:
                 IP_DATA["id"] = IP_ID
-                server.cmdb.category.update(apikey=apikey, objID=HOST_ID, category="C__CATG__IP", data=IP_DATA).get('message')
+                server.cmdb.category.update(apikey=apikey, objID=HOST_ID, category="C__CATG__IP", data=IP_DATA)
                 print "Updated IP %s" % IP
+
+        if "ipv6" in facts["ansible_facts"]["ansible_eth" + str(i)]:
+            for IPS in facts["ansible_facts"]["ansible_eth" + str(i)]["ipv6"]:
+                IPv6 = IPS["address"]
+                IPv6_ID = idfromip(IPv6)
+                try:
+                    HOSTNAME = gethostbyaddr(IPv6)[0]
+                except:
+                    HOSTNAME = None
+                if "link" in IPS["scope"]:
+                    IPv6_DATA = {
+                        "assigned_port": PORT_ID,
+                        "description": "Autocreated",
+                        "hostaddress": IPv6,
+                        "hostname": HOSTNAME,
+                        "ipv6_address": IPv6,
+                        "ipv6_assignment": "3",
+                        "ipv6_scope": "Link Local Unicast",
+                        "primary": "0",
+                        'net': "21",
+                        'net_type': "1000",
+                    }
+                    if IPv6_ID is None:
+                        IPv6_ID = int(server.cmdb.category.create(apikey=apikey, objID=HOST_ID, category="C__CATG__IP", data=IPv6_DATA).get('id'))
+                        print "Created IPv6 %s" % IPv6
+                    else:
+                        IPv6_DATA["id"] = IPv6_ID
+                        server.cmdb.category.update(apikey=apikey, objID=HOST_ID, category="C__CATG__IP", data=IPv6_DATA)
+                        print "Updated IPv6 %s" % IPv6
 
         try:
             for IPS in facts["ansible_facts"]["ansible_eth" + str(i)]["ipv4_secondaries"]:
@@ -138,7 +170,7 @@ for i in range(10):
                     print "Created IP %s" % IP
                 else:
                     IP_DATA["id"] = IP_ID
-                    server.cmdb.category.update(apikey=apikey, objID=HOST_ID, category="C__CATG__IP", data=IP_DATA).get('message')
+                    server.cmdb.category.update(apikey=apikey, objID=HOST_ID, category="C__CATG__IP", data=IP_DATA)
                     print "Updated IP %s" % IP
         except:
             print
